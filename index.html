@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🦟 ZANZARA ASSASSINA — Sfida Cruciani & Parenzo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Boogaloo&family=Fredoka+One&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a1a; overflow: hidden; font-family: 'Boogaloo', cursive; }
+  #gameCanvas { display: block; }
+  #ui {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 10;
+  }
+  #score-panel {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.7); border: 2px solid #ff6600;
+    border-radius: 20px; padding: 10px 30px;
+    color: #ffcc00; font-size: 28px; letter-spacing: 2px;
+    text-shadow: 0 0 10px #ff6600;
+  }
+  #lives { position: fixed; top: 20px; left: 20px; font-size: 30px; }
+  #level-badge {
+    position: fixed; top: 20px; right: 20px;
+    background: rgba(255,102,0,0.3); border: 2px solid #ff6600;
+    border-radius: 15px; padding: 8px 20px;
+    color: #ffcc00; font-size: 22px;
+  }
+  #overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: white; z-index: 20; pointer-events: all;
+  }
+  #overlay h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 72px; color: #ff6600;
+    text-shadow: 0 0 30px #ff6600, 0 0 60px #ff3300;
+    animation: pulse 1.5s infinite;
+    margin-bottom: 10px;
+  }
+  #overlay p { font-size: 26px; color: #ffcc00; margin: 10px 0; }
+  #overlay .sub { font-size: 18px; color: #aaa; }
+  #startBtn {
+    margin-top: 30px; padding: 18px 50px;
+    background: linear-gradient(135deg, #ff6600, #ff3300);
+    border: none; border-radius: 50px; color: white;
+    font-family: 'Fredoka One', cursive; font-size: 32px;
+    cursor: pointer; pointer-events: all;
+    box-shadow: 0 0 30px #ff6600;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  #startBtn:hover { transform: scale(1.08); box-shadow: 0 0 50px #ff6600; }
+  #instructions {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    color: rgba(255,255,255,0.5); font-size: 16px; text-align: center;
+  }
+  #hit-flash {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(255,0,0,0.4); pointer-events: none;
+    opacity: 0; z-index: 15;
+    transition: opacity 0.1s;
+  }
+  @keyframes blink {
+    from { opacity: 1; transform: translateX(-50%) scale(1); }
+    to   { opacity: 0.7; transform: translateX(-50%) scale(1.05); }
+  }
+  @keyframes pulse {
+    0%,100% { text-shadow: 0 0 30px #ff6600, 0 0 60px #ff3300; }
+    50% { text-shadow: 0 0 60px #ff6600, 0 0 100px #ff3300; transform: scale(1.05); }
+  }
+  #blood-meter {
+    position: fixed; bottom: 30px; right: 20px;
+    background: rgba(0,0,0,0.7); border: 2px solid #cc0000;
+    border-radius: 15px; padding: 10px 20px;
+    color: #ff4444; font-size: 20px;
+  }
+  #blood-bar {
+    width: 120px; height: 14px; background: #333; border-radius: 7px;
+    margin-top: 5px; overflow: hidden;
+  }
+  #blood-fill {
+    height: 100%; background: linear-gradient(90deg, #cc0000, #ff0000);
+    border-radius: 7px; transition: width 0.3s;
+    width: 0%;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="hit-flash"></div>
+<div id="score-panel">🦟 PUNTI: <span id="score">0</span></div>
+<div id="lives">❤️❤️❤️</div>
+<div id="level-badge">LIVELLO <span id="level">1</span></div>
+<div id="blood-meter">
+  🩸 SANGUE SUCCHIATO
+  <div id="blood-bar"><div id="blood-fill"></div></div>
+</div>
+<div id="instructions">WASD = muovi &nbsp;|&nbsp; ⬆️⬇️ frecce = su/giù &nbsp;|&nbsp; <strong style="color:#ff4444">SPAZIO = succhia sangue 🩸</strong></div>
+<div id="suck-prompt" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(200,0,0,0.8);color:white;font-family:'Boogaloo',cursive;font-size:28px;padding:10px 30px;border-radius:20px;display:none;animation:blink 0.5s infinite alternate;">🦟 PREMI SPAZIO per succhiare! 🩸</div>
+
+<div id="overlay">
+  <h1>🦟 ZANZARA<br>ASSASSINA</h1>
+  <p>Sfida <strong style="color:#ff6600">Cruciani</strong> e <strong style="color:#ffcc00">Parenzo</strong>!</p>
+  <p class="sub">Schiva le mani, succhia sangue, sopravvivi!</p>
+  <button id="startBtn" onclick="startGame()">⚡ INIZIA IL GIOCO!</button>
+  <div style="margin-top:20px; color:#888; font-size:15px;">
+    WASD / Frecce = muovi &nbsp;|&nbsp; Mouse = guarda &nbsp;|&nbsp; Spazio = punta
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ====== SETUP ======
+const canvas = document.getElementById('gameCanvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0820);
+scene.fog = new THREE.Fog(0x0a0820, 20, 80);
+
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 200);
+camera.position.set(0, 2, 8);
+
+// ====== LIGHTS ======
+const ambient = new THREE.AmbientLight(0x334466, 0.8);
+scene.add(ambient);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(5, 10, 5);
+dirLight.castShadow = true;
+scene.add(dirLight);
+const redLight = new THREE.PointLight(0xff2200, 1, 30);
+redLight.position.set(-5, 3, 0);
+scene.add(redLight);
+const blueLight = new THREE.PointLight(0x2244ff, 0.8, 30);
+blueLight.position.set(5, 3, 0);
+scene.add(blueLight);
+
+// ====== FLOOR ======
+const floorGeo = new THREE.PlaneGeometry(100, 100);
+const floorMat = new THREE.MeshLambertMaterial({ color: 0x111122 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI/2;
+floor.position.y = -3;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Grid lines on floor
+const gridHelper = new THREE.GridHelper(100, 50, 0x222244, 0x222244);
+gridHelper.position.y = -2.99;
+scene.add(gridHelper);
+
+// ====== FACE TEXTURE GENERATOR ======
+function createFaceTexture(name) {
+  const cv = document.createElement('canvas');
+  cv.width = 256; cv.height = 256;
+  const ctx = cv.getContext('2d');
+
+  if (name === 'cruciani') {
+    // Cruciani: abbronzato, capelli scuri, aria da opinionista arrabbiato
+    // Sfondo pelle ambrata
+    ctx.fillStyle = '#c8843a';
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Faccia ovale
+    ctx.fillStyle = '#d4924a';
+    ctx.beginPath();
+    ctx.ellipse(128, 130, 90, 105, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Capelli scuri fitti
+    ctx.fillStyle = '#1a0a00';
+    ctx.beginPath();
+    ctx.ellipse(128, 60, 92, 65, 0, 0, Math.PI*2);
+    ctx.fill();
+    // linea capelli
+    ctx.fillStyle = '#d4924a';
+    ctx.beginPath();
+    ctx.ellipse(128, 95, 82, 50, 0, 0, Math.PI);
+    ctx.fill();
+
+    // Sopracciglia folte e incazzate
+    ctx.fillStyle = '#1a0a00';
+    ctx.fillRect(65, 107, 42, 9);
+    ctx.fillRect(149, 107, 42, 9);
+    // angolo arrabbiato
+    ctx.fillStyle = '#1a0a00';
+    ctx.beginPath();
+    ctx.moveTo(65,107); ctx.lineTo(107,107); ctx.lineTo(65,116); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(191,107); ctx.lineTo(149,107); ctx.lineTo(191,116); ctx.fill();
+
+    // Occhi
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(95, 130, 18, 13, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(161, 130, 18, 13, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#3d1a00';
+    ctx.beginPath(); ctx.arc(97, 130, 9, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(163, 130, 9, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(98, 129, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(164, 129, 5, 0, Math.PI*2); ctx.fill();
+
+    // Naso pronunciato
+    ctx.strokeStyle = '#b07030';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(128, 145); ctx.lineTo(120, 170); ctx.lineTo(136, 170);
+    ctx.stroke();
+
+    // Bocca arrabbiata / sghemba
+    ctx.strokeStyle = '#8b3a00';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(95, 195); ctx.quadraticCurveTo(128, 188, 161, 195);
+    ctx.stroke();
+
+    // Barba/pizzetto
+    ctx.fillStyle = '#2a1200';
+    ctx.beginPath();
+    ctx.ellipse(128, 215, 25, 12, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = '#ff6600';
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('CRUCIANI', 128, 248);
+
+  } else {
+    // Parenzo: occhiali, capelli mossi, aria da moderatore scandalizzato
+    // Pelle chiara
+    ctx.fillStyle = '#f0d0a0';
+    ctx.fillRect(0, 0, 256, 256);
+
+    // Faccia tonda
+    ctx.fillStyle = '#f5dbb0';
+    ctx.beginPath();
+    ctx.ellipse(128, 135, 88, 100, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Capelli castani mossi
+    ctx.fillStyle = '#5a3010';
+    ctx.beginPath();
+    ctx.ellipse(128, 58, 90, 60, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#f5dbb0';
+    ctx.beginPath();
+    ctx.ellipse(128, 100, 80, 48, 0, 0, Math.PI);
+    ctx.fill();
+    // Ciuffo
+    ctx.fillStyle = '#5a3010';
+    ctx.beginPath();
+    ctx.moveTo(100,50); ctx.quadraticCurveTo(128,20,160,45);
+    ctx.lineTo(150,70); ctx.quadraticCurveTo(128,55,105,68);
+    ctx.fill();
+
+    // Sopracciglia sorprese/alzate
+    ctx.strokeStyle = '#5a3010';
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(68, 108); ctx.quadraticCurveTo(90, 100, 112, 108);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(144, 108); ctx.quadraticCurveTo(168, 100, 188, 108);
+    ctx.stroke();
+
+    // Occhiali
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 5;
+    ctx.fillStyle = 'rgba(180,220,255,0.25)';
+    // lente sinistra
+    ctx.beginPath(); ctx.roundRect(65, 112, 56, 38, 8); ctx.fill(); ctx.stroke();
+    // lente destra
+    ctx.beginPath(); ctx.roundRect(135, 112, 56, 38, 8); ctx.fill(); ctx.stroke();
+    // ponte
+    ctx.beginPath(); ctx.moveTo(121,130); ctx.lineTo(135,130); ctx.stroke();
+    // stanghette
+    ctx.beginPath(); ctx.moveTo(65,128); ctx.lineTo(38,122); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(191,128); ctx.lineTo(218,122); ctx.stroke();
+
+    // Occhi dietro gli occhiali
+    ctx.fillStyle = '#4a3020';
+    ctx.beginPath(); ctx.arc(93, 130, 9, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(163, 130, 9, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.arc(94, 129, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(164, 129, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(97, 126, 3, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(167, 126, 3, 0, Math.PI*2); ctx.fill();
+
+    // Naso piccolo
+    ctx.strokeStyle = '#c8a070';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(128,155); ctx.lineTo(122,172); ctx.lineTo(134,172);
+    ctx.stroke();
+
+    // Bocca aperta/scandalizzata
+    ctx.fillStyle = '#cc5533';
+    ctx.beginPath();
+    ctx.ellipse(128, 200, 22, 14, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(128, 196, 16, 8, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    // Label
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('PARENZO', 128, 248);
+  }
+
+  return new THREE.CanvasTexture(cv);
+}
+
+// ====== MOSQUITO (player) ======
+function createMosquito() {
+  const group = new THREE.Group();
+
+  // Body
+  const bodyGeo = new THREE.SphereGeometry(0.3, 8, 8);
+  bodyGeo.scale(1, 1.8, 1);
+  const bodyMat = new THREE.MeshPhongMaterial({ color: 0x1a3300, shininess: 80 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  group.add(body);
+
+  // Head
+  const headGeo = new THREE.SphereGeometry(0.22, 8, 8);
+  const headMat = new THREE.MeshPhongMaterial({ color: 0x2a4400 });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.position.set(0, 0.45, 0.1);
+  group.add(head);
+
+  // Proboscis (pungiglione)
+  const probGeo = new THREE.CylinderGeometry(0.02, 0.005, 0.7, 6);
+  const probMat = new THREE.MeshPhongMaterial({ color: 0x333300 });
+  const prob = new THREE.Mesh(probGeo, probMat);
+  prob.rotation.x = -Math.PI/2 + 0.3;
+  prob.position.set(0, 0.4, 0.55);
+  group.add(prob);
+
+  // Wings
+  for (let side of [-1, 1]) {
+    const wingGeo = new THREE.SphereGeometry(0.5, 8, 4);
+    wingGeo.scale(1, 0.05, 0.7);
+    const wingMat = new THREE.MeshPhongMaterial({
+      color: 0xaaddff, transparent: true, opacity: 0.5, side: THREE.DoubleSide
+    });
+    const wing = new THREE.Mesh(wingGeo, wingMat);
+    wing.position.set(side * 0.5, 0.2, 0);
+    wing.rotation.y = side * 0.3;
+    group.add(wing);
+    group.userData['wing'+side] = wing;
+  }
+
+  // Eyes (red)
+  for (let x of [-0.1, 0.1]) {
+    const eyeGeo = new THREE.SphereGeometry(0.06, 6, 6);
+    const eyeMat = new THREE.MeshPhongMaterial({ color: 0xff0000, emissive: 0x880000 });
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(x, 0.5, 0.28);
+    group.add(eye);
+  }
+
+  // Legs
+  for (let i = 0; i < 6; i++) {
+    const legGeo = new THREE.CylinderGeometry(0.01, 0.01, 0.5, 4);
+    const legMat = new THREE.MeshPhongMaterial({ color: 0x111100 });
+    const leg = new THREE.Mesh(legGeo, legMat);
+    const angle = (i/6)*Math.PI - Math.PI/2;
+    const side = i < 3 ? -1 : 1;
+    leg.rotation.z = side * (Math.PI/2 + Math.sin(angle)*0.5);
+    leg.position.set(side * 0.35, -0.1 + (i%3)*0.1, 0);
+    group.add(leg);
+  }
+
+  return group;
+}
+
+// ====== HEAD ENEMY ======
+function createHeadEnemy(name) {
+  const group = new THREE.Group();
+  group.userData.type = name;
+  group.userData.health = 3;
+
+  // Head sphere
+  const headGeo = new THREE.SphereGeometry(1.2, 32, 32);
+  const texture = createFaceTexture(name);
+  const headMat = new THREE.MeshPhongMaterial({ map: texture, shininess: 30 });
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.castShadow = true;
+  group.add(head);
+
+  // Neck
+  const neckGeo = new THREE.CylinderGeometry(0.5, 0.6, 0.8, 12);
+  const neckMat = new THREE.MeshPhongMaterial({ color: name === 'cruciani' ? 0xc8843a : 0xf5dbb0 });
+  const neck = new THREE.Mesh(neckGeo, neckMat);
+  neck.position.y = -1.4;
+  group.add(neck);
+
+  // Body stub
+  const bodyGeo = new THREE.CylinderGeometry(0.8, 0.7, 1.5, 12);
+  const bodyMat = new THREE.MeshPhongMaterial({ color: name === 'cruciani' ? 0x222244 : 0x4444aa });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = -2.5;
+  group.add(body);
+
+  // Hands (for swatting)
+  for (let side of [-1, 1]) {
+    const handGroup = new THREE.Group();
+    const armGeo = new THREE.CylinderGeometry(0.15, 0.12, 2.5, 8);
+    const armMat = new THREE.MeshPhongMaterial({ color: name === 'cruciani' ? 0xc8843a : 0xf5dbb0 });
+    const arm = new THREE.Mesh(armGeo, armMat);
+    arm.rotation.z = side * Math.PI/3;
+    arm.position.set(side * 1.2, -0.5, 0);
+    handGroup.add(arm);
+
+    const handGeo = new THREE.SphereGeometry(0.3, 8, 8);
+    const hand = new THREE.Mesh(handGeo, armMat);
+    hand.position.set(side * 2.2, 0.5, 0);
+    handGroup.add(hand);
+
+    group.add(handGroup);
+    group.userData['hand'+side] = handGroup;
+    group.userData['handBase'+side] = {x: side*2.2, y:0.5, z:0};
+  }
+
+  return group;
+}
+
+// ====== PARTICLES ======
+function createBloodSplat(pos) {
+  const particles = [];
+  for (let i = 0; i < 12; i++) {
+    const geo = new THREE.SphereGeometry(0.05, 4, 4);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xcc0000 });
+    const p = new THREE.Mesh(geo, mat);
+    p.position.copy(pos);
+    p.userData.vel = new THREE.Vector3(
+      (Math.random()-0.5)*0.3,
+      Math.random()*0.2,
+      (Math.random()-0.5)*0.3
+    );
+    p.userData.life = 1;
+    scene.add(p);
+    particles.push(p);
+  }
+  return particles;
+}
+
+// ====== GAME STATE ======
+let gameActive = false;
+let score = 0;
+let lives = 3;
+let level = 1;
+let bloodPercent = 0;
+let mosquito, enemies = [], particles = [];
+let keys = {};
+let clock = new THREE.Clock();
+let mosquitoPos = new THREE.Vector3(0, 2, 5);
+let mosquitoVel = new THREE.Vector3();
+let wingPhase = 0;
+let enemyTimer = 0;
+let swatCooldown = 0;
+const hitFlash = document.getElementById('hit-flash');
+
+function spawnEnemy() {
+  const name = Math.random() < 0.5 ? 'cruciani' : 'parenzo';
+  const enemy = createHeadEnemy(name);
+  const side = Math.random() < 0.5 ? -1 : 1;
+  enemy.position.set(side * 12, 0, Math.random()*6 - 8);
+  enemy.userData.targetX = side * (2 + Math.random()*2);
+  enemy.userData.speed = 0.5 + level * 0.3;
+  enemy.userData.swatPhase = Math.random()*Math.PI*2;
+  enemy.userData.direction = -side;
+  scene.add(enemy);
+  enemies.push(enemy);
+}
+
+function updateUI() {
+  document.getElementById('score').textContent = score;
+  document.getElementById('level').textContent = level;
+  let livesStr = '';
+  for(let i=0;i<lives;i++) livesStr += '❤️';
+  for(let i=lives;i<3;i++) livesStr += '🖤';
+  document.getElementById('lives').textContent = livesStr;
+  document.getElementById('blood-fill').style.width = bloodPercent + '%';
+}
+
+function triggerHit() {
+  hitFlash.style.opacity = '1';
+  setTimeout(() => hitFlash.style.opacity = '0', 150);
+  lives = Math.max(0, lives - 1);
+  updateUI();
+  if (lives <= 0) gameOver();
+}
+
+function gameOver() {
+  gameActive = false;
+  const overlay = document.getElementById('overlay');
+  overlay.innerHTML = `
+    <h1 style="font-size:60px">💀 SCHIACCIATA!</h1>
+    <p>La zanzara è stata eliminata da Cruciani e Parenzo...</p>
+    <p style="color:#ffcc00;font-size:32px">🦟 PUNTEGGIO FINALE: ${score}</p>
+    <button id="startBtn" onclick="startGame()" style="margin-top:20px;padding:18px 50px;background:linear-gradient(135deg,#ff6600,#ff3300);border:none;border-radius:50px;color:white;font-family:'Fredoka One',cursive;font-size:28px;cursor:pointer">🔄 RIPROVA!</button>
+  `;
+  overlay.style.display = 'flex';
+}
+
+window.startGame = function() {
+  document.getElementById('overlay').style.display = 'none';
+  
+  // Reset
+  enemies.forEach(e => scene.remove(e));
+  particles.forEach(p => scene.remove(p));
+  enemies = []; particles = [];
+  if (mosquito) scene.remove(mosquito);
+  
+  score = 0; lives = 3; level = 1; bloodPercent = 0;
+  mosquitoPos.set(0, 2, 5);
+  mosquitoVel.set(0,0,0);
+  enemyTimer = 0;
+  
+  mosquito = createMosquito();
+  scene.add(mosquito);
+  
+  gameActive = true;
+  updateUI();
+};
+
+// ====== INPUT ======
+document.addEventListener('keydown', e => { keys[e.code] = true; });
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+let mouseX = 0, mouseY = 0;
+document.addEventListener('mousemove', e => {
+  mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+  mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+});
+
+// ====== ANIMATION ======
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (!gameActive) { renderer.render(scene, camera); return; }
+
+  const t = clock.elapsedTime;
+
+  // Wings flapping
+  wingPhase += dt * 20;
+  if (mosquito) {
+    const w1 = mosquito.userData['wing1'];
+    const wm1 = mosquito.userData['wing-1'];
+    if(w1) w1.rotation.z = Math.sin(wingPhase)*0.5;
+    if(wm1) wm1.rotation.z = -Math.sin(wingPhase)*0.5;
+
+    // Movimento 3D completo
+    // WASD = avanti/indietro/sinistra/destra (piano XZ)
+    // Frecce SU/GIU = su e giù (asse Y)
+    const speed = 10;
+    mosquitoVel.set(0,0,0);
+    if (keys['KeyA']       || keys['ArrowLeft'])  mosquitoVel.x = -speed;
+    if (keys['KeyD']       || keys['ArrowRight']) mosquitoVel.x =  speed;
+    if (keys['KeyW'])                              mosquitoVel.z = -speed;
+    if (keys['KeyS'])                              mosquitoVel.z =  speed;
+    if (keys['ArrowUp'])                           mosquitoVel.y =  speed;
+    if (keys['ArrowDown'])                         mosquitoVel.y = -speed;
+
+    mosquitoPos.addScaledVector(mosquitoVel, dt);
+
+    // Bounds
+    mosquitoPos.x = Math.max(-10, Math.min(10, mosquitoPos.x));
+    mosquitoPos.y = Math.max(-1.5, Math.min(7, mosquitoPos.y));
+    mosquitoPos.z = Math.max(-15, Math.min(8, mosquitoPos.z));
+
+    // Hover bob
+    mosquito.position.copy(mosquitoPos);
+    mosquito.position.y += Math.sin(t*6)*0.05;
+    mosquito.rotation.z = -mosquitoVel.x * 0.1;
+    mosquito.rotation.x = mosquitoVel.y * 0.05;
+
+    // Camera follow - segue la zanzara, niente influenza del mouse
+    camera.position.lerp(new THREE.Vector3(
+      mosquitoPos.x * 0.3,
+      mosquitoPos.y * 0.3 + 3,
+      mosquitoPos.z + 9
+    ), 0.1);
+    camera.lookAt(mosquitoPos.x * 0.3, mosquitoPos.y * 0.3, mosquitoPos.z - 2);
+  }
+
+  // Spawn enemies
+  enemyTimer -= dt;
+  if (enemyTimer <= 0) {
+    spawnEnemy();
+    enemyTimer = Math.max(0.8, 3 - level*0.3);
+  }
+
+  // Update enemies
+  swatCooldown -= dt;
+  enemies.forEach((enemy, idx) => {
+    // Move towards player area
+    enemy.position.x += enemy.userData.direction * enemy.userData.speed * dt;
+    enemy.position.y = Math.sin(t * 1.5 + idx) * 0.3;
+
+    // Swat animation
+    enemy.userData.swatPhase += dt * (1.5 + level*0.3);
+    const swatAmp = Math.sin(enemy.userData.swatPhase);
+    const h1 = enemy.userData['hand1'];
+    const hm1 = enemy.userData['hand-1'];
+    if(h1) h1.rotation.z = swatAmp * 0.8;
+    if(hm1) hm1.rotation.z = -swatAmp * 0.6;
+
+    // Face player
+    enemy.lookAt(mosquitoPos.x, enemy.position.y, mosquitoPos.z);
+
+    // Collision with mosquito
+    if (mosquito) {
+      const dist = enemy.position.distanceTo(mosquitoPos);
+      if (dist < 2.5 && swatCooldown <= 0) {
+        swatCooldown = 1.5;
+        triggerHit();
+      }
+
+      // Blood sucking: se premi SPAZIO vicino alla testa
+      const sucking = keys['Space'];
+      if (dist < 1.8 && sucking) {
+        bloodPercent = Math.min(100, bloodPercent + dt * 30);
+        score += Math.floor(dt * 50);
+        updateUI();
+
+        // Blood particles occasionally
+        if (Math.random() < 0.1) {
+          const bp = createBloodSplat(enemy.position.clone().add(new THREE.Vector3(0,0.5,0)));
+          particles.push(...bp);
+        }
+
+        if (bloodPercent >= 100) {
+          // Level up!
+          bloodPercent = 0;
+          level++;
+          score += level * 200;
+          updateUI();
+          // Flash
+          hitFlash.style.background = 'rgba(0,255,0,0.3)';
+          hitFlash.style.opacity = '1';
+          setTimeout(() => { hitFlash.style.opacity='0'; hitFlash.style.background='rgba(255,0,0,0.4)'; }, 300);
+        }
+      } else if (dist < 1.8 && !sucking) {
+        // Indica che puoi succhiare
+        enemy.userData.canSuck = true;
+      } else {
+        enemy.userData.canSuck = false;
+      }
+    }
+
+    // Remove if off screen
+    if (Math.abs(enemy.position.x) > 20) {
+      scene.remove(enemy);
+      enemies.splice(idx, 1);
+    }
+  });
+
+  // Update particles
+  particles.forEach((p, i) => {
+    p.userData.life -= dt * 2;
+    p.userData.vel.y -= dt * 0.5;
+    p.position.add(p.userData.vel.clone().multiplyScalar(dt * 30));
+    p.material.opacity = p.userData.life;
+    if (p.userData.life <= 0) {
+      scene.remove(p);
+      particles.splice(i, 1);
+    }
+  });
+
+  // Mostra prompt "premi spazio" se vicino a un nemico
+  const suckPrompt = document.getElementById('suck-prompt');
+  const nearEnemy = enemies.some(e => mosquito && e.position.distanceTo(mosquitoPos) < 1.8);
+  suckPrompt.style.display = (nearEnemy && !keys['Space']) ? 'block' : 'none';
+
+  // Lights animation
+  redLight.position.x = Math.sin(t*0.7)*8;
+  blueLight.position.x = Math.cos(t*0.5)*8;
+
+  renderer.render(scene, camera);
+}
+
+// ====== RESIZE ======
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+animate();
+</script>
+</body>
+</html>
